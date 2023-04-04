@@ -63,20 +63,46 @@ def read_from_file(filename):
     f.close()
 
 
+
+def trans(tag_list):
+    transition_counts = np.zeros(shape=(len(tag)))
+    tag_counts = defaultdict(int)
+    i=0
+    for tag in range(len(tag_list) - 1):
+        transition_counts[tag[i]][tag[i + 1]] += 1
+        tag_counts[tag[i]] += 1
+        i+=1
+
+
+
+    for sequence in tag_list:
+        for i in range(len(sequence) - 1):
+            transition_counts[sequence[i]][sequence[i + 1]] += 1
+            tag_counts[sequence[i]] += 1
+    transition_probabilities = defaultdict(lambda: defaultdict(float))
+    for tag1, tag2_counts in transition_counts.items():
+        for tag2, count in tag2_counts.items():
+            transition_probabilities[tag1][tag2] = count / tag_counts[tag1]
+    return transition_probabilities
+
 def train_hmm(training_file):
     # Initialize dictionaries to store counts
 
-    start_counts = {}
-    transition_counts = {}
-    emission_counts = {}
+    start_counts = []
+    transition_counts = []
+    emission_counts = []
 
     tag_counts = {}
     tag_number=0
     tag_list=[]
+    tag_id = {}
+    tagIdCount=0
 
     word_counts = {}
     word_number=0
     word_list = []
+    word_id={}
+    wordIdCount=0
 
 
     for file in training_file:
@@ -96,22 +122,54 @@ def train_hmm(training_file):
             start_counts[prev_tag] = 0
         start_counts[prev_tag] += 1"""
 
+        #splitting line into word and tag
         word, tag=line.rsplit(' : ')
 
+        #getting rid of the \n
+        tag=tag[:-1]
+
+        #adding the word to the word sequence and indexing
         word_list.append(word)
-        tag_list.append(tag[:-1])
+        if word not in word_id:
+            word_id[word] = wordIdCount
+            wordIdCount += 1
+
+        #adding the tag to the tag sequence
+        tag_list.append(tag)
+        #adding to tag count and indexing
+        if tag not in tag_counts:
+            tag_counts[tag]=1
+            tag_id[tag]=tagIdCount
+            tagIdCount+=1
+        else:
+            tag_counts[tag]+=1
+
+    SWordIds=[]
+    STagIds=[]
+
+    #trans probs
+    for i in range(0, len(word_list)):
+        SWordIds.append(word_list[i])
+        STagIds.append(tag_list[i])
+
+        if word_list[i] in [".", "?", "!"]:
+            """ok here we are going to calculate all the proabilities """
+
+
+
+    terminate={}
+    #create transition matrix of size 90x90 for 91 dif tags
+    transition_counts=np.zeros(shape=(90,90))
+
+    #print(tag_id)
+
+    #for i in range(len(tag_id)):
+        #print(i)
+
+
     #TRANSITION
-    transition_counts = defaultdict(lambda: defaultdict(int))
-    tag_counts = defaultdict(int)
-    for sequence in tag_counts:
-        for i in range(len(sequence) - 1):
-            transition_counts[sequence[i]][sequence[i + 1]] += 1
-            tag_counts[sequence[i]] += 1
-    transition_probabilities = defaultdict(lambda: defaultdict(float))
-    for tag1, tag2_counts in transition_counts.items():
-        for tag2, count in tag2_counts.items():
-            transition_probabilities[tag1][tag2] = count / tag_counts[tag1]
-    print(transition_probabilities)
+    #r=trans(tag_list)
+    #print(r.items())
 
     #print(transition_probabilities)
     #print(transition_probabilities)
