@@ -4,7 +4,6 @@ import argparse
 import numpy as np
 import time
 
-
 np.set_printoptions(threshold=sys.maxsize)
 
 def train_hmm(training_file):
@@ -64,9 +63,12 @@ def train_hmm(training_file):
     STagIds=[]
 
     #create matricies
+    #transition_counts=[[0 for _ in range(91)] for _ in range(91)]
+    #initial_counts=[0 for _ in range(91)]
+    #emission_counts=[[0 for _ in range(len(word_id))] for _ in range(91)]
     transition_counts=np.zeros(shape=(91,91))
-    initial_counts=np.zeros(shape=(91))
-    emission_counts=np.zeros(shape= (91,(len(word_id))))
+    initial_counts=np.zeros(shape=91)
+    emission_counts=np.zeros(shape=(91, len(word_id)))
 
     #trans probs
     for i in range(0, len(word_list)):
@@ -103,25 +105,34 @@ def train_hmm(training_file):
     row_sums = np.sum(E, axis=1)
     E_normalized = E / row_sums[:, np.newaxis]
 
-
     return T_normalized,I_normalized,E_normalized,tag_id, word_id
 
 def viterbi(T,I,E,sentance, tag_id, word_id):
     prob=[]
     prev=[]
 
-    sentance_ids = [word_id.get(word, -4) for word in sentance]
-
-    k=1 #k smoothing to account for unseen words
+    sentance_ids = [word_id.get(word, None) for word in sentance]
+    k=2 #k smoothing to account for unseen words
     Slength=len(sentance)
+
 
     prob=[[0 for _ in range(91)] for _ in range(Slength)]
     prev=[[0 for _ in range(91)] for _ in range(Slength)]
 
     #determine values for time 0
     for i in range(0,91):
-        prob[0][i] = I[i] * E[i, sentance_ids[0]]
+        if sentance_ids[0] is not None:
+            prob[0][i] = I[i] * E[i, sentance_ids[0]]
+        else:
+            prob[0][i] = I[i] * (k / (len(word_id) + k * len(tag_id)))
         prev[0][i] = None
+
+    etimeSum=0
+    itimeSum=0
+
+    beta=0.1
+    row_sums = np.sum(E > 0, axis=1)
+    denominators = row_sums + k * len(tag_id)
 
     #for steps 1 - end of sentance find each state's current state's
     #most likely prior state x
@@ -129,13 +140,46 @@ def viterbi(T,I,E,sentance, tag_id, word_id):
         for i in range(0, 91):
             max_prob = 0
             max_index = 0
+            #x=row_sums[i]
             for j in range(0, 91):
-                temp_prob = prob[t - 1][j] * T[j, i] * E[i, sentance_ids[t]]
+                """
+                temp_prob = prob[t - 1][j] * T[j, i]
+                if sentance_ids[t] is not None:
+                    start_time = time.time()
+
+                    temp_prob *= E[i, sentance_ids[t]]
+
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    itimeSum += elapsed_time
+
+                    print("If Elapsed time: ", elapsed_time, "TimeSum: ", itimeSum)
+                else:
+                    start_time = time.time()
+
+                    temp_prob *= (k / (sum(E[i, :] > 0) + k * len(tag_id)))
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    etimeSum += elapsed_time
+
+
+                    print("Else Elapsed time: ", elapsed_time, "TimeSum: ", etimeSum)
+                if temp_prob > max_prob:
+                    max_prob = temp_prob
+                    max_index = j"""
+
+                temp_prob = prob[t - 1][j] * T[j, i]
+                if sentance_ids[t] is not None:
+                    temp_prob *= E[i, sentance_ids[t]]
+                else:
+                    temp_prob *= ((k / (denominators[i])))
                 if temp_prob > max_prob:
                     max_prob = temp_prob
                     max_index = j
             prob[t][i] = max_prob
             prev[t][i] = max_index
+
+
 
     optimal_tags = []
     max_prob = 0
@@ -158,46 +202,9 @@ def viterbi(T,I,E,sentance, tag_id, word_id):
         Stags.append(max_indexN[0])
     Stags.reverse()
 
+
     return Stags
 
-def Fakeviterbi(T, I, E, sentence, tag_id, word_id):
-    # Look up the indices for the sentence words.
-    sentence_ids = [word_id.get(word, -4) for word in sentence]
-
-    # Initialize arrays for the forward probabilities and backpointers.
-    num_tags = len(tag_id)
-    num_words = len(sentence)
-    probs = [[0 for _ in range(len(tag_id))] for _ in range(sentence)]
-    pointers = np.zeros((num_words, num_tags), dtype=np.int)
-
-    # Set the initial probabilities.
-    probs[0, :] = I * E[:, sentence_ids[0]]
-
-    # Iterate over the remaining words.
-    for i in range(1, num_words):
-        # Compute the element-wise product of the previous probabilities,
-        # the transition matrix, and the emission probabilities.
-        products = probs[i-1, :, np.newaxis] * T * E[:, sentence_ids[i]]
-
-        # Find the maximum product for each tag.
-        max_products = np.max(products, axis=1)
-
-        # Update the probabilities and pointers.
-        probs[i, :] = max_products
-        pointers[i, :] = np.argmax(products, axis=1)
-
-    # Find the tag with the highest probability at the end of the sentence.
-    end_tag = np.argmax(probs[-1, :])
-
-    # Backtrack through the pointers to find the optimal tag sequence.
-    tags = np.zeros(num_words, dtype=np.int)
-    tags[-1] = end_tag
-    for i in range(num_words-2, -1, -1):
-        tags[i] = pointers[i+1, tags[i+1]]
-
-    # Convert the tag indices to tag names and return.
-    tag_names = [list(tag_id.keys())[list(tag_id.values()).index(tag)] for tag in tags]
-    return tag_names
 def tagging(T, I, E, tag_id, word_id, testfile, outputfile):
 
     word_list = []
@@ -223,12 +230,20 @@ def tagging(T, I, E, tag_id, word_id, testfile, outputfile):
             end_time = time.time()
             elapsed_time = end_time - start_time
             timeSum+=elapsed_time
+
             print("Elapsed time: ", elapsed_time, "TimeSum: ", timeSum)
+
 
             SWordIds.clear()
 
+    if len(SWordIds)!=0:
+        Stags += viterbi(T, I, E, SWordIds, tag_id, word_id)
+        SWordIds.clear()
+
+    print(len(Stags),len(word_list))
 
     x = open(outputfile, "w")
+
     for Idx in range(0, len(word_list)):
         x.write("{} : {}\n".format(word_list[Idx], Stags[Idx]))
 
@@ -266,13 +281,13 @@ if __name__ == '__main__':
     print("output file is {}".format(args.outputfile))
 
     print("Starting the tagging process.")
-    #python3 main.py --trainingfiles training1.txt training2.txt --testfile test1.txt --outputfile sol.txt
+    #
 
     T_normalized,I_normalized,E_normalized,tag_id, word_id=train_hmm(args.trainingfiles[0])
     tagging(T_normalized,I_normalized,E_normalized,tag_id, word_id,args.testfile, args.outputfile)
 
     with open("sol.txt", "r") as output_file, \
-                open("solution1.txt", "r") as solution_file, \
+                open("solution2.txt", "r") as solution_file, \
                 open("results1.txt", "w") as results_file:
             # Each word is on a separate line in each file.
             output = output_file.readlines()
