@@ -104,7 +104,6 @@ def train_hmm(training_file):
     E_normalized = E / row_sums[:, np.newaxis]
 
 
-
     return T_normalized,I_normalized,E_normalized,tag_id, word_id
 
 def viterbi(T,I,E,sentance, tag_id, word_id):
